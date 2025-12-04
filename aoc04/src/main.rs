@@ -32,6 +32,10 @@ impl Grid {
         self.elems[self.get_idx(col, row)]
     }
 
+    pub fn remove_roll(&mut self, col: usize, row: usize) {
+        self.elems[self.get_idx(col, row)] = '.';
+    }
+
     pub fn create(lines: &Vec<String>) -> Self {
         let rows = lines.len() + 2;
         let cols = lines[0].len() + 2;
@@ -51,7 +55,7 @@ impl Grid {
         Grid { rows, cols, elems }
     }
 
-    fn is_available(&self, col: usize, row: usize) -> bool {
+    pub fn is_available(&self, col: usize, row: usize) -> bool {
         if self.get_elem(col, row) != '@' {
             return false;
         }
@@ -74,7 +78,7 @@ impl Grid {
         num_used < 4
     }
 
-    fn get_rolls(&self) -> usize {
+    pub fn get_rolls(&self) -> usize {
         let mut available_rolls = 0;
         for row in 1..self.rows - 1 {
             for col in 1..self.cols - 1 {
@@ -85,6 +89,35 @@ impl Grid {
         }
 
         println!("available_rolls: {available_rolls}");
+
+        available_rolls
+    }
+
+    pub fn helper_remove_rolls(&mut self) -> usize {
+        let mut available_rolls = 0;
+        for row in 1..self.rows - 1 {
+            for col in 1..self.cols - 1 {
+                if self.is_available(col, row) {
+                    available_rolls += 1;
+                    self.remove_roll(col, row);
+                }
+            }
+        }
+
+        available_rolls
+    }
+
+    pub fn remove_rolls(&mut self) -> usize {
+        let mut available_rolls = 0;
+        loop {
+            let more_rolls = self.helper_remove_rolls();
+            if more_rolls == 0 {
+                break;
+            }
+            available_rolls += more_rolls;
+        }
+
+        println!("Total removable rolls: {available_rolls}");
 
         available_rolls
     }
@@ -104,9 +137,25 @@ fn test_part1() {
     assert_eq!(rolls, 1451);
 }
 
+#[test]
+fn test_prelim2() {
+    let mut grid = Grid::create(&get_input("prelim.txt"));
+    let rolls = grid.remove_rolls();
+    assert_eq!(rolls, 43);
+}
+
+#[test]
+fn test_part2() {
+    let mut grid = Grid::create(&get_input("input.txt"));
+    let rolls = grid.remove_rolls();
+    assert_eq!(rolls, 8701);
+}
+
 fn main() {
-    let grid = Grid::create(&get_input("prelim.txt"));
+    let mut grid = Grid::create(&get_input("prelim.txt"));
     grid.get_rolls();
-    let grid = Grid::create(&get_input("input.txt"));
+    grid.remove_rolls();
+    let mut grid = Grid::create(&get_input("input.txt"));
     grid.get_rolls();
+    grid.remove_rolls();
 }
