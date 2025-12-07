@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -59,8 +60,13 @@ impl TachyonGrid {
         self.get_elem(col, row) == 'S'
     }
 
-    pub fn is_empty(&self, col: usize, row: usize) -> bool {
-        self.get_elem(col, row) == '.'
+    pub fn get_start(&self) -> (usize, usize) {
+        for col in 0..self.cols {
+            if self.is_start(col, 0) {
+                return (col, 0);
+            }
+        }
+        panic!("start not found");
     }
 
     pub fn is_splitter(&self, col: usize, row: usize) -> bool {
@@ -75,19 +81,12 @@ impl TachyonGrid {
         self.elems[self.get_idx(col, row)] = '|';
     }
 
-    pub fn add_splits(&mut self) {
-        let mut col = 0;
-        let mut row = 0;
-        let mut start = Default::default();
-        for col in 0..self.cols {
-            if self.is_start(col, row) {
-                start = (col, row);
-                // Add a beam to below the start
-                self.add_beam(col, row + 1);
-                break;
-            }
-        }
+    pub fn add_splits(&mut self) -> usize {
+        // Add a beam to below the start
+        let (col, row) = self.get_start();
+        self.add_beam(col, row + 1);
 
+        let mut splits = 0;
         for row in 1..self.rows {
             for col in 0..self.cols {
                 // Check above for beam
@@ -100,6 +99,7 @@ impl TachyonGrid {
                             // Split the beam here
                             self.add_beam(col - 1, row);
                             self.add_beam(col + 1, row);
+                            splits += 1;
                         }
                         '|' => {}
                         c => {
@@ -109,6 +109,10 @@ impl TachyonGrid {
                 }
             }
         }
+
+        println!("splits: {splits}");
+
+        splits
     }
 
     pub fn count_splits(&self) -> usize {
@@ -126,52 +130,80 @@ impl TachyonGrid {
         splits
     }
 
-    pub fn is_available(&self, col: usize, row: usize) -> bool {
-        if self.get_elem(col, row) != '@' {
-            return false;
+    // Dynamic programming memoization (recursive helper function)
+    fn count_timelines_memo(&self, memo: &mut HashMap<(usize, usize), usize>, col: usize, row: usize) -> usize {
+        if memo.contains_key(&(col, row)) {
+            return *memo.get(&(col, row)).unwrap();
         }
 
-        let mut num_used = 0;
-        for (c, r) in [
-            (col - 1, row - 1),
-            (col, row - 1),
-            (col + 1, row - 1),
-            (col - 1, row),
-            (col + 1, row),
-            (col - 1, row + 1),
-            (col, row + 1),
-            (col + 1, row + 1),
-        ] {
-            if self.get_elem(c, r) == '@' {
-                num_used += 1;
-            }
+        // Base case for recursion
+        if row == self.rows - 1 {
+            memo.insert((col, row), 1);
+            return 1;
         }
-        num_used < 4
+
+        let timelines = match self.get_elem(col, row) {
+            '.' | 'S' | '|' => {
+                self.count_timelines_memo(memo, col, row + 1)
+            }
+            '^' => {
+                self.count_timelines_memo(memo, col - 1, row + 1) + self.count_timelines_memo(memo, col + 1, row + 1)
+            }
+            c => {
+                panic!("Unhandled tachyon space {c}");
+            }
+        };
+        memo.insert((col, row), timelines);
+        timelines
+    }
+
+    pub fn count_timelines(&self) -> usize {
+
+        let mut memo = HashMap::new();
+        let (col, row) = self.get_start();
+
+        let timelines = self.count_timelines_memo(&mut memo, col, row);
+        println!("timelines: {timelines}");
+        timelines
     }
 }
 
 #[test]
 fn test_prelim() {
     let mut grid = TachyonGrid::create(&get_input("prelim.txt"));
-    grid.add_splits();
-    let splits = grid.count_splits();
+    let splits = grid.add_splits();
     assert_eq!(splits, 21);
 }
 
 #[test]
 fn test_part1() {
     let mut grid = TachyonGrid::create(&get_input("input.txt"));
-    grid.add_splits();
-    let splits = grid.count_splits();
+    let splits = grid.add_splits();
     assert_eq!(splits, 1504);
+}
+
+#[test]
+fn test_prelim2() {
+    let grid = TachyonGrid::create(&get_input("prelim.txt"));
+    let timelines = grid.count_timelines();
+    assert_eq!(timelines, 40);
+}
+
+#[test]
+fn test_part2() {
+    let grid = TachyonGrid::create(&get_input("input.txt"));
+    //for _ in 0..10000 {
+    let timelines = grid.count_timelines();
+    assert_eq!(timelines, 5137133207830);
+    //}
 }
 
 fn main() {
     let mut grid = TachyonGrid::create(&get_input("prelim.txt"));
     grid.add_splits();
-    let splits = grid.count_splits();
+    grid.count_timelines();
+    //grid.print();
     let mut grid = TachyonGrid::create(&get_input("input.txt"));
     grid.add_splits();
-    let splits = grid.count_splits();
-    //grid.print();
+    grid.count_timelines();
 }
