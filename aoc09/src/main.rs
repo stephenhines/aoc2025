@@ -73,7 +73,7 @@ impl CompMap {
     }
 }
 
-struct Grid {
+struct MovieTheater {
     dim_x: usize,
     dim_y: usize,
     tiles: Vec<(usize, usize)>,
@@ -81,21 +81,34 @@ struct Grid {
     cmap: CompMap,
 }
 
-impl Grid {
-    fn new(tiles: &Vec<(usize, usize)>) -> Self {
-        let cmap = CompMap::new(tiles);
+impl MovieTheater {
+    fn parse_lines(lines: &Vec<String>) -> Vec<(usize, usize)> {
+        let mut tiles = Vec::new();
+
+        for line in lines {
+            let toks = line.split(',').collect::<Vec<_>>();
+            assert_eq!(toks.len(), 2);
+            let x = toks[0].parse::<usize>().unwrap();
+            let y = toks[1].parse::<usize>().unwrap();
+            tiles.push((x, y));
+        }
+
+        tiles
+    }
+
+    pub fn new(lines: &Vec<String>) -> Self {
+        let tiles = Self::parse_lines(lines);
+        let cmap = CompMap::new(&tiles);
         let dim_x = cmap.x_vals.len();
         let dim_y = cmap.y_vals.len();
-
-        // TODO Start here to finish conversions
 
         let mut ctiles: Box<[char]> = vec!['.'; dim_x * dim_y].into_boxed_slice();
         let (x0, y0) = cmap.compress(tiles[0]);
         ctiles[y0 * dim_x + x0] = '#';
         let mut x_prev = x0;
         let mut y_prev = y0;
-        for &t in tiles {
-            let (x, y) = cmap.compress(t);
+        for t in &tiles {
+            let (x, y) = cmap.compress(*t);
             ctiles[y * dim_x + x] = '#';
             if x == x_prev {
                 let y_min = cmp::min(y, y_prev);
@@ -131,21 +144,23 @@ impl Grid {
             panic!("Invalid non-rectangular final coordinate ({x0}, {y0})");
         }
 
-        // Now we have to flood fill the exterior/interior
-        let mut found = false;
+        // Now we have to flood fill the interior.
+        //
+        // I'm using a dumb trick here to find the top left corner.
+        // This is definitive, because we know we have only horizontal and
+        // vertical edges, and this is the first corner. It must connect
+        // both straight down from here, and directly to the right here.
+        // Thus we can start our flood fill directly from this point that
+        // is directly to the lower right of the top left corner.
         let mut work_queue = Vec::new();
-        for y in 0..dim_y {
+        'outer: for y in 0..dim_y {
             for x in 0..dim_x {
                 let idx = y * dim_x + x;
                 if ctiles[idx] == '#' {
-                    found = true;
                     let start_flood = (x + 1, y + 1);
                     work_queue.push(start_flood);
-                    break;
+                    break 'outer;
                 }
-            }
-            if found {
-                break;
             }
         }
 
@@ -162,10 +177,10 @@ impl Grid {
             }
         }
 
-        Grid {
+        MovieTheater {
             dim_x,
             dim_y,
-            tiles: tiles.to_vec(),
+            tiles,
             ctiles,
             cmap,
         }
@@ -191,10 +206,12 @@ impl Grid {
             }
         }
 
+        println!("max_area: {max_area}");
+
         max_area
     }
 
-    fn red_green_area(&self) -> usize {
+    pub fn red_green_area(&self) -> usize {
         let mut areas = Vec::new();
         for i in 0..self.tiles.len() {
             for j in i..self.tiles.len() {
@@ -214,17 +231,14 @@ impl Grid {
             let y_max = cmp::max(yi, yj);
             let mut valid = true;
 
-            for y in y_min..y_max + 1 {
-                if !valid {
-                    break;
-                }
+            'outer: for y in y_min..y_max + 1 {
                 for x in x_min..x_max + 1 {
                     let idx = y * self.dim_x + x;
                     match self.ctiles[idx] {
                         'X' | '#' => {}
                         '.' => {
                             valid = false;
-                            break;
+                            break 'outer;
                         }
                         c => {
                             panic!("Invalid symbol {c}");
@@ -233,6 +247,7 @@ impl Grid {
                 }
             }
             if valid {
+                println!("max_rg_area: {area}");
                 return area;
             }
         }
@@ -256,40 +271,6 @@ impl Grid {
             }
             println!("");
         }
-    }
-}
-
-struct MovieTheater {
-    grid: Grid,
-}
-
-impl MovieTheater {
-    pub fn new(lines: &Vec<String>) -> Self {
-        let mut tiles = Vec::new();
-
-        for line in lines {
-            let toks = line.split(',').collect::<Vec<_>>();
-            assert_eq!(toks.len(), 2);
-            let x = toks[0].parse::<usize>().unwrap();
-            let y = toks[1].parse::<usize>().unwrap();
-            tiles.push((x, y));
-        }
-
-        let grid = Grid::new(&tiles);
-        MovieTheater { grid }
-    }
-
-    pub fn largest_rect_area(&self) -> usize {
-        let max_area = self.grid.largest_rect_area();
-        println!("max_area: {max_area}");
-        max_area
-    }
-
-    pub fn red_green_area(&self) -> usize {
-        //self.grid.print();
-        let max_rg_area = self.grid.red_green_area();
-        println!("max_rg_area: {max_rg_area}");
-        max_rg_area
     }
 }
 
