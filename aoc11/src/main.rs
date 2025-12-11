@@ -17,6 +17,7 @@ fn get_input(filename: &str) -> Vec<String> {
 
 #[derive(Debug)]
 struct Servers {
+    #[allow(unused)]
     names: Vec<String>,
     name_map: HashMap<String, usize>,
     connections: Vec<HashSet<usize>>,
@@ -56,6 +57,8 @@ impl Servers {
         }
     }
 
+    // Memoization is so easy in Rust (and other modern languages), so this
+    // is just a helper function for caching the unique paths.
     pub fn find_paths_cache(
         &self,
         paths_to_out: &mut HashMap<usize, usize>,
@@ -77,12 +80,40 @@ impl Servers {
         paths
     }
 
-    pub fn find_paths(&self) -> usize {
-        let you_idx = self.name_map.get("you").unwrap();
-        let out_idx = self.name_map.get("out").unwrap();
+    fn find_paths(&self, from_idx: usize, to_idx: usize) -> usize {
         let mut paths_to_out = HashMap::new();
-        paths_to_out.insert(*out_idx, 1);
-        let paths = self.find_paths_cache(&mut paths_to_out, *you_idx, *out_idx);
+        paths_to_out.insert(to_idx, 1);
+        self.find_paths_cache(&mut paths_to_out, from_idx, to_idx)
+    }
+
+    pub fn find_paths_you_to_out(&self) -> usize {
+        let you_idx = *self.name_map.get("you").unwrap();
+        let out_idx = *self.name_map.get("out").unwrap();
+        let paths = self.find_paths(you_idx, out_idx);
+        println!("paths: {paths}");
+        paths
+    }
+
+    pub fn find_paths_svr_to_out(&self) -> usize {
+        let svr_idx = *self.name_map.get("svr").unwrap();
+        let out_idx = *self.name_map.get("out").unwrap();
+        let dac_idx = *self.name_map.get("dac").unwrap();
+        let fft_idx = *self.name_map.get("fft").unwrap();
+
+        // We can be clever and just find paths from svr -> dac, dac -> fft,
+        // and then fft -> out. Then we can do the same thing going to fft
+        // first, then dac, and that will let us calculate the number of total
+        // combinations of paths from svr -> out. It's great that my solution
+        // for part 1 was trivially modified to handle these cases.
+        let svr_dac = self.find_paths(svr_idx, dac_idx);
+        let dac_fft = self.find_paths(dac_idx, fft_idx);
+        let fft_out = self.find_paths(fft_idx, out_idx);
+
+        let svr_fft = self.find_paths(svr_idx, fft_idx);
+        let fft_dac = self.find_paths(fft_idx, dac_idx);
+        let dac_out = self.find_paths(dac_idx, out_idx);
+
+        let paths = svr_dac * dac_fft * fft_out + svr_fft * fft_dac * dac_out;
 
         println!("paths: {paths}");
 
@@ -92,21 +123,37 @@ impl Servers {
 
 #[test]
 fn test_prelim() {
-    let paths = Servers::new(&get_input("prelim.txt")).find_paths();
+    let paths = Servers::new(&get_input("prelim.txt")).find_paths_you_to_out();
     assert_eq!(paths, 5);
 }
 
 #[test]
 fn test_part1() {
-    let paths = Servers::new(&get_input("input.txt")).find_paths();
+    let paths = Servers::new(&get_input("input.txt")).find_paths_you_to_out();
     assert_eq!(paths, 500);
 }
 
+#[test]
+fn test_prelim2() {
+    let paths = Servers::new(&get_input("prelim2.txt")).find_paths_svr_to_out();
+    assert_eq!(paths, 2);
+}
+
+#[test]
+fn test_part2() {
+    let paths = Servers::new(&get_input("input.txt")).find_paths_svr_to_out();
+    assert_eq!(paths, 287039700129600);
+}
 
 fn main() {
     let servers = Servers::new(&get_input("prelim.txt"));
-    println!("{servers:?}");
-    servers.find_paths();
+    //println!("{servers:?}");
+    servers.find_paths_you_to_out();
+
+    let servers = Servers::new(&get_input("prelim2.txt"));
+    servers.find_paths_svr_to_out();
+
     let servers = Servers::new(&get_input("input.txt"));
-    servers.find_paths();
+    servers.find_paths_you_to_out();
+    servers.find_paths_svr_to_out();
 }
