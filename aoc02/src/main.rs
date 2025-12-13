@@ -20,6 +20,42 @@ struct Range {
     end_str: String,
 }
 
+impl Range {
+    fn check_range(&self) -> usize {
+        let mut sum = 0;
+        //println!("range: {} {}", self.start, self.end);
+        let s_midpoint = self.start_str.len() / 2;
+        let e_midpoint = self.end_str.len() / 2;
+        let (sl, sr) = self.start_str.split_at(s_midpoint);
+        let (el, er) = self.end_str.split_at(e_midpoint);
+
+        //println!("subs: {sl} {sr}");
+
+        let mut start_left = sl.parse::<usize>().unwrap_or_default();
+
+        // We can't start with zero, so just try moving things along first
+        if start_left == 0 {
+            start_left = 1;
+        }
+
+        loop {
+            let sl = format!("{start_left}");
+            let try_str = [sl.clone(), sl.clone()].concat();
+            let try_val = try_str.parse::<usize>().unwrap();
+            if try_val >= self.start && try_val <= self.end {
+                //println!("found: {try_val}");
+                sum += try_val;
+            }
+            if try_val >= self.end {
+                break;
+            }
+            start_left += 1;
+        }
+
+        sum
+    }
+}
+
 fn parse_lines(lines: &Vec<String>) -> Vec<Range> {
     let mut v: Vec<Range> = Vec::new();
     for line in lines {
@@ -40,45 +76,11 @@ fn parse_lines(lines: &Vec<String>) -> Vec<Range> {
     v
 }
 
-fn check_range(r: &Range) -> usize {
-    let mut sum = 0;
-    println!("range: {} {}", r.start, r.end);
-    let s_midpoint = r.start_str.len() / 2;
-    let e_midpoint = r.end_str.len() / 2;
-    let (sl, sr) = r.start_str.split_at(s_midpoint);
-    let (el, er) = r.end_str.split_at(e_midpoint);
-
-    println!("subs: {sl} {sr}");
-
-    let mut start_left = sl.parse::<usize>().unwrap_or_default();
-
-    // We can't start with zero, so just try moving things along first
-    if start_left == 0 {
-        start_left = 1;
-    }
-
-    loop {
-        let sl = format!("{start_left}");
-        let try_str = [sl.clone(), sl.clone()].concat();
-        let try_val = try_str.parse::<usize>().unwrap();
-        if try_val >= r.start && try_val <= r.end {
-            println!("found: {try_val}");
-            sum += try_val;
-        }
-        if try_val >= r.end {
-            break;
-        }
-        start_left += 1;
-    }
-
-    sum
-}
-
 fn compute_part1(ranges: &Vec<Range>) -> usize {
     let mut sum = 0;
 
     for r in ranges {
-        sum += check_range(r);
+        sum += r.check_range();
     }
 
     println!("invalid ids: {sum}");
