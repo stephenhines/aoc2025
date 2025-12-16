@@ -3,6 +3,10 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 
+use std::error::Error;
+
+use good_lp::{constraint, default_solver, Solution, SolverModel, variables};
+
 fn get_input(filename: &str) -> Vec<String> {
     let file = File::open(filename).unwrap();
     let reader = BufReader::new(file);
@@ -112,6 +116,42 @@ impl InitLine {
 
         min_presses
     }
+
+    pub fn part2(&self) -> usize {
+        let mut min_presses = 0;
+
+        let mut vars = variables!();
+        let a = vars.add_variable();
+        let b = vars.add_variable();
+        let c = vars.add_variable();
+        let d = vars.add_variable();
+        let e = vars.add_variable();
+        let f = vars.add_variable();
+
+        let mut constraints = Vec::new();
+        constraints.push(constraint!(e + f == 3));
+        constraints.push(constraint!(b + f == 5));
+        constraints.push(constraint!(c + d + e == 4));
+        constraints.push(constraint!(a + b + d == 7));
+        constraints.push(constraint!(a >= 0));
+        constraints.push(constraint!(b >= 0));
+        constraints.push(constraint!(c >= 0));
+        constraints.push(constraint!(d >= 0));
+        constraints.push(constraint!(e >= 0));
+        constraints.push(constraint!(f >= 0));
+
+        let sol = vars.minimise(a + b + c + d + e + f).using(default_solver).with_all(constraints).solve().unwrap();
+        let presses  = sol.eval(a + b + c + d + e + f);
+        println!("presses: {presses}");
+        min_presses = presses as usize;
+
+        println!("min_presses: {min_presses}");
+
+        //  0123   a   b b   c   d d   e e   f f
+        // [.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
+
+        min_presses as usize
+    }
 }
 
 fn min_presses(init_lines: &Vec<InitLine>) -> usize {
@@ -148,6 +188,7 @@ fn test_part1() {
 fn main() {
     let init_lines = parse_lines(&get_input("prelim.txt"));
     min_presses(&init_lines);
+    init_lines[0].part2();
     let init_lines = parse_lines(&get_input("input.txt"));
     min_presses(&init_lines);
 }
