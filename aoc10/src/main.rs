@@ -3,9 +3,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 
-use std::error::Error;
-
-use good_lp::{constraint, default_solver, Solution, SolverModel, variables};
+use good_lp::{constraint, default_solver, variable, variables, Expression, Solution, SolverModel};
 
 fn get_input(filename: &str) -> Vec<String> {
     let file = File::open(filename).unwrap();
@@ -23,6 +21,7 @@ struct InitLine {
     num_lights: usize,
     light: usize,
     wiring: Vec<usize>,
+    wiring_indices: Vec<Vec<usize>>,
     joltage: Vec<usize>,
 }
 
@@ -30,6 +29,7 @@ impl InitLine {
     pub fn new(line: &String) -> Self {
         let mut light = 0;
         let mut wiring = Vec::new();
+        let mut wiring_indices = Vec::new();
         let mut joltage = Vec::new();
 
         let toks = line.split_whitespace().collect::<Vec<_>>();
@@ -70,16 +70,21 @@ impl InitLine {
             assert_eq!(w.chars().nth(w.len() - 1).unwrap(), ')');
             let wiring_strs = &w[1..w.len() - 1];
             let mut val = 0;
+            let mut indices_vec = Vec::new();
             wiring_strs.split(',').for_each(|w| {
-                val += 1 << w.parse::<usize>().unwrap();
+                let index = w.parse::<usize>().unwrap();
+                val += 1 << index;
+                indices_vec.push(index);
             });
             wiring.push(val);
+            wiring_indices.push(indices_vec);
         }
 
         Self {
             num_lights,
             light,
             wiring,
+            wiring_indices,
             joltage,
         }
     }
@@ -117,40 +122,61 @@ impl InitLine {
         min_presses
     }
 
-    pub fn part2(&self) -> usize {
-        let mut min_presses = 0;
+    // I needed to write this because I missed out that I needed to "round up"
+    // the floating point solutions.
+    pub fn check_part2(&self, button_presses: Vec<usize>) {
+        let mut joltage = vec![0usize; self.num_lights];
+        for (i, presses) in button_presses.iter().enumerate() {
+            let buttons = &self.wiring_indices[i];
+            for &button in buttons {
+                joltage[button] += presses;
+            }
+        }
 
-        let mut vars = variables!();
-        let a = vars.add_variable();
-        let b = vars.add_variable();
-        let c = vars.add_variable();
-        let d = vars.add_variable();
-        let e = vars.add_variable();
-        let f = vars.add_variable();
+        for i in 0..self.num_lights {
+            if self.joltage[i] != joltage[i] {
+                println!("Failed! {self:?}");
+                println!("presses: {button_presses:?}");
+                println!("expected joltage: {:?}", self.joltage);
+                println!("got joltage:      {:?}", joltage);
+            }
+            assert_eq!(self.joltage[i], joltage[i]);
+        }
+    }
+
+    pub fn part2(&self) -> usize {
+        let mut prob_vars = variables!();
+        let vars = prob_vars.add_vector(variable().integer().min(0), self.wiring.len());
 
         let mut constraints = Vec::new();
-        constraints.push(constraint!(e + f == 3));
-        constraints.push(constraint!(b + f == 5));
-        constraints.push(constraint!(c + d + e == 4));
-        constraints.push(constraint!(a + b + d == 7));
-        constraints.push(constraint!(a >= 0));
-        constraints.push(constraint!(b >= 0));
-        constraints.push(constraint!(c >= 0));
-        constraints.push(constraint!(d >= 0));
-        constraints.push(constraint!(e >= 0));
-        constraints.push(constraint!(f >= 0));
+        for (i, joltage) in self.joltage.iter().enumerate() {
+            let mut sum = Expression::from(0);
+            for (w, wire) in self.wiring.iter().enumerate() {
+                if wire & (1 << i) != 0 {
+                    sum += vars[w];
+                }
+            }
+            let joltage_expr = Expression::from(*joltage as i32);
+            let constraint = constraint!(sum == joltage_expr);
+            constraints.push(constraint);
+        }
 
-        let sol = vars.minimise(a + b + c + d + e + f).using(default_solver).with_all(constraints).solve().unwrap();
-        let presses  = sol.eval(a + b + c + d + e + f);
-        println!("presses: {presses}");
-        min_presses = presses as usize;
+        let objective: Expression = vars.iter().sum();
+        //let model = prob_vars.minimise(objective).using(default_solver);
+        let model = prob_vars.minimise(objective).using(default_solver);
+        let sol = model.with_all(constraints).solve().unwrap();
+        let mut min_presses = 0;
+        let mut button_presses = Vec::new();
+        for v in vars {
+            let val = sol.value(v).round() as usize;
+            min_presses += val;
+            button_presses.push(val);
+        }
+        //println!("min_presses(j): {min_presses}");
 
-        println!("min_presses: {min_presses}");
+        self.check_part2(button_presses);
 
-        //  0123   a   b b   c   d d   e e   f f
-        // [.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
-
-        min_presses as usize
+        min_presses
     }
 }
 
@@ -161,6 +187,17 @@ fn min_presses(init_lines: &Vec<InitLine>) -> usize {
         min_presses += line.min_presses();
     }
     println!("min_presses: {min_presses}");
+
+    min_presses
+}
+
+fn part2(init_lines: &Vec<InitLine>) -> usize {
+    let mut min_presses = 0;
+
+    for line in init_lines {
+        min_presses += line.part2();
+    }
+    println!("min_presses (joltage): {min_presses}");
 
     min_presses
 }
@@ -185,10 +222,24 @@ fn test_part1() {
     assert_eq!(presses, 415);
 }
 
+#[test]
+fn test_prelim2() {
+    let presses = part2(&parse_lines(&get_input("prelim.txt")));
+    assert_eq!(presses, 33);
+}
+
+#[test]
+fn test_part2() {
+    let presses = part2(&parse_lines(&get_input("input.txt")));
+    assert_eq!(presses, 16663);
+}
+
 fn main() {
     let init_lines = parse_lines(&get_input("prelim.txt"));
     min_presses(&init_lines);
-    init_lines[0].part2();
+    part2(&init_lines);
+
     let init_lines = parse_lines(&get_input("input.txt"));
     min_presses(&init_lines);
+    part2(&init_lines);
 }
